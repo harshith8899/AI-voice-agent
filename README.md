@@ -30,6 +30,8 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
+Requires [Ollama](https://ollama.com) running locally with the model in `.env` pulled (`ollama pull qwen3:8b`).
+
 ## Run
 
 ```bash
@@ -43,8 +45,8 @@ Visit `http://localhost:8000` for the frontend, `http://localhost:8000/health` f
 | Module | Status |
 |---|---|
 | 1. Project setup (FastAPI skeleton) | ✅ Done |
-| 2. LLM text chat (Ollama) | ⬜ Next |
-| 3. Speech-to-Text (Whisper) | ⬜ |
+| 2. LLM text chat (Ollama) | ✅ Done |
+| 3. Speech-to-Text (Whisper) | ⬜ Next |
 | 4. Text-to-Speech (Piper) | ⬜ |
 | 5. Full voice pipeline | ⬜ |
 | 6. Personal Assistant agent | ⬜ |
