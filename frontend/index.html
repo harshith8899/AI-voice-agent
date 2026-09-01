@@ -46,7 +46,9 @@
         try {
           const res = await fetch("/api/stt", { method: "POST", body: formData });
           const data = await res.json();
-          input.value = data.text;
+          if (data.text) {
+            await sendMessage(data.text);
+          }
         } catch (err) {
           addMessage("ai", "Sorry, transcription failed.");
         } finally {
@@ -66,13 +68,16 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
-    form.addEventListener("submit", async (e) => {
+    form.addEventListener("submit", (e) => {
       e.preventDefault();
       const message = input.value.trim();
       if (!message) return;
-      addMessage("user", message);
       input.value = "";
+      sendMessage(message);
+    });
 
+    async function sendMessage(message) {
+      addMessage("user", message);
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -81,11 +86,11 @@
         });
         const data = await res.json();
         addMessage("ai", data.reply);
-        speak(data.reply);
+        await speak(data.reply);
       } catch (err) {
         addMessage("ai", "Sorry, something went wrong.");
       }
-    });
+    }
 
     async function speak(text) {
       try {
