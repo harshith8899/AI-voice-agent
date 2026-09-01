@@ -55,8 +55,8 @@ Visit `http://localhost:8000` for the frontend, `http://localhost:8000/health` f
 | 3. Speech-to-Text (Whisper) | ✅ Done |
 | 4. Text-to-Speech (Piper) | ✅ Done |
 | 5. Full voice pipeline | ✅ Done |
-| 6. Personal Assistant agent | ⬜ Next |
-| 7. Sales Agent | ⬜ |
+| 6. Personal Assistant agent | ✅ Done |
+| 7. Sales Agent | ⬜ Next |
 | 8. Database (calls/messages/leads) | ⬜ |
 | 9. Dashboard | ⬜ |
 | 10. Telephony (real phone calls) | ⬜ |

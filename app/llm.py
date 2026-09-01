@@ -6,17 +6,20 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 
 
-def chat(messages: list[dict]) -> str:
+def chat(messages: list[dict], json_mode: bool = False) -> str:
     """Send conversation history to Ollama and return the assistant's reply text."""
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": messages,
+        "stream": False,
+        "think": False,
+    }
+    if json_mode:
+        payload["format"] = "json"
     try:
         response = requests.post(
             f"{OLLAMA_HOST}/api/chat",
-            json={
-                "model": OLLAMA_MODEL,
-                "messages": messages,
-                "stream": False,
-                "think": False,
-            },
+            json=payload,
             timeout=60,
         )
         response.raise_for_status()
