@@ -81,10 +81,26 @@
         });
         const data = await res.json();
         addMessage("ai", data.reply);
+        speak(data.reply);
       } catch (err) {
         addMessage("ai", "Sorry, something went wrong.");
       }
     });
+
+    async function speak(text) {
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const audioBlob = await res.blob();
+        const audio = new Audio(URL.createObjectURL(audioBlob));
+        audio.play();
+      } catch (err) {
+        console.error("TTS playback failed", err);
+      }
+    }
   </script>
 </body>
 </html>

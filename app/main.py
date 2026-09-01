@@ -2,7 +2,8 @@ import os
 import tempfile
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile
+from fastapi import BackgroundTasks, FastAPI, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -10,6 +11,7 @@ load_dotenv()
 
 from app.llm import chat
 from app.stt import transcribe
+from app.tts import synthesize
 
 app = FastAPI(title="AI Voice Agent")
 
@@ -22,6 +24,10 @@ conversation_history: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}
 
 class ChatRequest(BaseModel):
     message: str
+
+
+class TTSRequest(BaseModel):
+    text: str
 
 
 @app.get("/health")
@@ -48,6 +54,14 @@ async def stt_endpoint(audio: UploadFile):
     finally:
         os.remove(tmp_path)
     return {"text": text}
+
+
+@app.post("/api/tts")
+def tts_endpoint(req: TTSRequest, background_tasks: BackgroundTasks):
+    tmp_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+    synthesize(req.text, tmp_path)
+    background_tasks.add_task(os.remove, tmp_path)
+    return FileResponse(tmp_path, media_type="audio/wav")
 
 
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

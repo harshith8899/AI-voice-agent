@@ -4,3 +4,4 @@ python-dotenv
 requests
 python-multipart
 faster-whisper
+piper-tts

@@ -32,6 +32,12 @@ copy .env.example .env
 
 Requires [Ollama](https://ollama.com) running locally with the model in `.env` pulled (`ollama pull qwen3:8b`).
 
+Download the Piper voice (not committed to git):
+
+```bash
+python -m piper.download_voices en_US-lessac-medium --download-dir data/voices
+```
+
 ## Run
 
 ```bash
@@ -47,8 +53,8 @@ Visit `http://localhost:8000` for the frontend, `http://localhost:8000/health` f
 | 1. Project setup (FastAPI skeleton) | ✅ Done |
 | 2. LLM text chat (Ollama) | ✅ Done |
 | 3. Speech-to-Text (Whisper) | ✅ Done |
-| 4. Text-to-Speech (Piper) | ⬜ Next |
-| 5. Full voice pipeline | ⬜ |
+| 4. Text-to-Speech (Piper) | ✅ Done |
+| 5. Full voice pipeline | ⬜ Next |
 | 6. Personal Assistant agent | ⬜ |
 | 7. Sales Agent | ⬜ |
 | 8. Database (calls/messages/leads) | ⬜ |
