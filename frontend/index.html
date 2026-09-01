@@ -11,12 +11,52 @@
   <form id="chat-form">
     <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off" />
     <button type="submit">Send</button>
+    <button type="button" id="record-btn">🎤</button>
   </form>
 
   <script>
     const chat = document.getElementById("chat");
     const form = document.getElementById("chat-form");
     const input = document.getElementById("chat-input");
+    const recordBtn = document.getElementById("record-btn");
+
+    let mediaRecorder = null;
+    let audioChunks = [];
+
+    recordBtn.addEventListener("click", async () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.addEventListener("dataavailable", (e) => audioChunks.push(e.data));
+      mediaRecorder.addEventListener("stop", async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        recordBtn.textContent = "🎤";
+
+        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("audio", audioBlob, "recording.webm");
+
+        recordBtn.disabled = true;
+        try {
+          const res = await fetch("/api/stt", { method: "POST", body: formData });
+          const data = await res.json();
+          input.value = data.text;
+        } catch (err) {
+          addMessage("ai", "Sorry, transcription failed.");
+        } finally {
+          recordBtn.disabled = false;
+        }
+      });
+
+      mediaRecorder.start();
+      recordBtn.textContent = "⏹";
+    });
 
     function addMessage(role, text) {
       const div = document.createElement("div");

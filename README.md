@@ -46,8 +46,8 @@ Visit `http://localhost:8000` for the frontend, `http://localhost:8000/health` f
 |---|---|
 | 1. Project setup (FastAPI skeleton) | ✅ Done |
 | 2. LLM text chat (Ollama) | ✅ Done |
-| 3. Speech-to-Text (Whisper) | ⬜ Next |
-| 4. Text-to-Speech (Piper) | ⬜ |
+| 3. Speech-to-Text (Whisper) | ✅ Done |
+| 4. Text-to-Speech (Piper) | ⬜ Next |
 | 5. Full voice pipeline | ⬜ |
 | 6. Personal Assistant agent | ⬜ |
 | 7. Sales Agent | ⬜ |

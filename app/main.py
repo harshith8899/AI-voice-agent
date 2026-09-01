@@ -1,11 +1,15 @@
+import os
+import tempfile
+
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 load_dotenv()
 
 from app.llm import chat
+from app.stt import transcribe
 
 app = FastAPI(title="AI Voice Agent")
 
@@ -31,6 +35,19 @@ def chat_endpoint(req: ChatRequest):
     reply = chat(conversation_history)
     conversation_history.append({"role": "assistant", "content": reply})
     return {"reply": reply}
+
+
+@app.post("/api/stt")
+async def stt_endpoint(audio: UploadFile):
+    suffix = os.path.splitext(audio.filename or "")[1] or ".webm"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await audio.read())
+        tmp_path = tmp.name
+    try:
+        text = transcribe(tmp_path)
+    finally:
+        os.remove(tmp_path)
+    return {"text": text}
 
 
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
