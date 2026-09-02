@@ -30,7 +30,7 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Requires [Ollama](https://ollama.com) running locally with the model in `.env` pulled (`ollama pull qwen3:8b`).
+Requires [Ollama](https://ollama.com) running locally with the model in `.env` pulled (`ollama pull llama3.2` or `ollama pull qwen2.5:7b`).
 
 Download the Piper voice (not committed to git):
 
@@ -74,8 +74,8 @@ The frontend has an Agent dropdown (Personal Assistant / Sales Agent) that switc
 | 6. Personal Assistant agent | ✅ Done |
 | 7. Sales Agent | ✅ Done |
 | 8. Database (calls/messages/leads) | ✅ Done |
-| 9. Dashboard | ⬜ Next |
-| 10. Telephony (real phone calls) | ⬜ |
+| 9. Dashboard | ✅ Done |
+| 10. Telephony (real phone calls) | ⬜ Next |
 
 ## Development principle
 

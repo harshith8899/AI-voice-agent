@@ -36,9 +36,25 @@ def generate_summary(history: list[dict]) -> str:
     return chat(prompt)
 
 
+def _clean_json_str(raw: str) -> str:
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        cleaned = cleaned[start : end + 1]
+    return cleaned
+
+
 def _parse_reply(raw: str) -> dict:
     try:
-        data = json.loads(raw)
+        data = json.loads(_clean_json_str(raw))
         reply = str(data.get("reply", "")).strip()
         intent = str(data.get("intent", "UNKNOWN")).strip().upper()
         caller_name = data.get("caller_name")
@@ -69,8 +85,14 @@ def handle_message(user_message: str) -> dict:
 
     if result["caller_name"]:
         current_caller["name"] = result["caller_name"]
-        db.update_call_caller(call_id, caller_name=result["caller_name"])
     caller = current_caller["name"] or "Unknown caller"
+
+    # Always update call duration, intent, and caller name on every turn
+    db.update_call_activity(
+        call_id,
+        intent=result["intent"],
+        caller_name=result["caller_name"],
+    )
 
     if result["intent"] == "MESSAGE":
         db.add_message(call_id, caller, user_message, callback_required=False)
@@ -84,7 +106,7 @@ def handle_message(user_message: str) -> dict:
         current_caller["name"] = None
         current_call["id"] = None
 
-    return {"reply": result["reply"], "intent": result["intent"]}
+    return {"reply": result["reply"], "intent": result["intent"], "call_id": call_id}
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +156,7 @@ def create_lead(call_id: int) -> None:
 
 def _parse_sales_reply(raw: str) -> dict:
     try:
-        data = json.loads(raw)
+        data = json.loads(_clean_json_str(raw))
         reply = str(data.get("reply", "")).strip()
         intent = str(data.get("intent", "UNKNOWN")).strip().upper()
         caller_name = data.get("caller_name")
@@ -177,8 +199,14 @@ def handle_sales_message(user_message: str) -> dict:
         current_lead["phone"] = result["phone"]
     if result["interest"]:
         current_lead["interest"] = result["interest"]
-    if result["caller_name"] or result["phone"]:
-        db.update_call_caller(call_id, caller_name=current_lead["name"], phone=current_lead["phone"])
+
+    # Always update call duration, intent, caller name, and phone on every turn
+    db.update_call_activity(
+        call_id,
+        intent=result["intent"],
+        caller_name=result["caller_name"],
+        phone=result["phone"],
+    )
 
     if result["intent"] == "END_CALL":
         create_lead(call_id)
@@ -191,4 +219,60 @@ def handle_sales_message(user_message: str) -> dict:
         current_lead["interest"] = None
         current_sales_call["id"] = None
 
-    return {"reply": result["reply"], "intent": result["intent"]}
+    return {"reply": result["reply"], "intent": result["intent"], "call_id": call_id}
+
+
+# ---------------------------------------------------------------------------
+# Session Reset Helpers
+# ---------------------------------------------------------------------------
+
+
+def reset_personal_assistant() -> dict:
+    global current_call, current_caller, conversation_history
+    if current_call["id"] is not None:
+        call_id = current_call["id"]
+        summary = None
+        if len(conversation_history) > 1:
+            try:
+                summary = generate_summary(conversation_history)
+            except Exception:
+                summary = "Call completed."
+        db.end_call(call_id, intent="COMPLETED", summary=summary)
+
+    current_caller["name"] = None
+    current_call["id"] = None
+    conversation_history = [{"role": "system", "content": PERSONAL_ASSISTANT_PROMPT}]
+    return {"status": "ok", "message": "Personal assistant reset"}
+
+
+def reset_sales_agent() -> dict:
+    global current_sales_call, current_lead, sales_history
+    if current_sales_call["id"] is not None:
+        call_id = current_sales_call["id"]
+        if current_lead["name"] or current_lead["phone"] or current_lead["interest"]:
+            create_lead(call_id)
+        summary = None
+        if len(sales_history) > 1:
+            try:
+                summary = generate_summary(sales_history)
+            except Exception:
+                summary = "Sales call completed."
+        db.end_call(call_id, intent="COMPLETED", summary=summary)
+
+    current_lead["name"] = None
+    current_lead["phone"] = None
+    current_lead["interest"] = None
+    current_sales_call["id"] = None
+    sales_history = [{"role": "system", "content": SALES_AGENT_PROMPT}]
+    return {"status": "ok", "message": "Sales agent reset"}
+
+
+def reset_agent(agent_type: str = "all") -> dict:
+    if agent_type in ("assistant", "personal_assistant"):
+        return reset_personal_assistant()
+    elif agent_type in ("sales", "sales_agent"):
+        return reset_sales_agent()
+    else:
+        reset_personal_assistant()
+        reset_sales_agent()
+        return {"status": "ok", "message": "All agents reset"}

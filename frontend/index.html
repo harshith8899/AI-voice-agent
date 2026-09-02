@@ -2,29 +2,111 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Voice Agent</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <h1>AI Voice Agent</h1>
-  <label for="agent-select">Agent:</label>
-  <select id="agent-select">
-    <option value="assistant">Personal Assistant</option>
-    <option value="sales">Sales Agent</option>
-  </select>
-  <div id="chat"></div>
-  <form id="chat-form">
-    <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off" />
-    <button type="submit">Send</button>
-    <button type="button" id="record-btn">🎤</button>
-  </form>
+
+  <!-- Navigation Tabs -->
+  <div class="tabs">
+    <button type="button" class="tab-btn active" id="tab-agent-btn">Voice Agent</button>
+    <button type="button" class="tab-btn" id="tab-dashboard-btn">Analytics Dashboard</button>
+  </div>
+
+  <!-- Voice Agent Section -->
+  <div id="agent-view">
+    <div class="agent-control">
+      <div class="agent-select-group">
+        <label for="agent-select">Agent:</label>
+        <select id="agent-select">
+          <option value="assistant">Personal Assistant</option>
+          <option value="sales">Sales Agent</option>
+        </select>
+      </div>
+      <div class="agent-actions">
+        <button type="button" id="new-chat-btn" class="btn-secondary">➕ New Chat</button>
+        <button type="button" id="end-chat-btn" class="btn-danger">⏹ End Call</button>
+      </div>
+    </div>
+    <div id="chat">
+      <div class="msg system">Ready! Speak or type to start a conversation. Each new chat will automatically be recorded in the Analytics Dashboard.</div>
+    </div>
+    <form id="chat-form">
+      <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off" />
+      <button type="submit" id="send-btn">Send</button>
+      <button type="button" id="record-btn">🎤</button>
+    </form>
+  </div>
+
+  <!-- Analytics Dashboard Section -->
+  <div id="dashboard-view" style="display: none;">
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Total Calls</div>
+        <div class="metric-value" id="metric-calls">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Leads & Messages</div>
+        <div class="metric-value" id="metric-actions">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg Duration</div>
+        <div class="metric-value" id="metric-duration">0s</div>
+      </div>
+    </div>
+
+    <div class="table-header">
+      <h2>Recent Call Logs</h2>
+      <button type="button" id="refresh-dashboard-btn" class="refresh-btn">🔄 Refresh</button>
+    </div>
+
+    <div class="table-container">
+      <table id="calls-table">
+        <thead>
+          <tr>
+            <th>Call ID</th>
+            <th>Agent</th>
+            <th>Caller</th>
+            <th>Time</th>
+            <th>Duration</th>
+            <th>Intent</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="calls-tbody">
+          <tr>
+            <td colspan="8" style="text-align: center; color: #888;">Loading call logs...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Transcript Modal -->
+  <div id="transcript-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">Call Transcript</h3>
+        <button type="button" class="modal-close" id="modal-close-btn">&times;</button>
+      </div>
+      <div id="modal-meta" class="modal-meta"></div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
 
   <script>
+    // --- Voice Agent Elements & Logic ---
     const chat = document.getElementById("chat");
     const form = document.getElementById("chat-form");
     const input = document.getElementById("chat-input");
     const recordBtn = document.getElementById("record-btn");
+    const sendBtn = document.getElementById("send-btn");
     const agentSelect = document.getElementById("agent-select");
+    const newChatBtn = document.getElementById("new-chat-btn");
+    const endChatBtn = document.getElementById("end-chat-btn");
 
     let mediaRecorder = null;
     let audioChunks = [];
@@ -35,41 +117,52 @@
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream);
-      audioChunks = [];
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
 
-      mediaRecorder.addEventListener("dataavailable", (e) => audioChunks.push(e.data));
-      mediaRecorder.addEventListener("stop", async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        recordBtn.textContent = "🎤";
+        mediaRecorder.addEventListener("dataavailable", (e) => audioChunks.push(e.data));
+        mediaRecorder.addEventListener("stop", async () => {
+          stream.getTracks().forEach((track) => track.stop());
+          recordBtn.textContent = "🎤";
 
-        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-        const formData = new FormData();
-        formData.append("audio", audioBlob, "recording.webm");
+          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "recording.webm");
 
-        recordBtn.disabled = true;
-        try {
-          const res = await fetch("/api/stt", { method: "POST", body: formData });
-          const data = await res.json();
-          if (data.text) {
-            await sendMessage(data.text);
+          recordBtn.disabled = true;
+          try {
+            const res = await fetch("/api/stt", { method: "POST", body: formData });
+            const data = await res.json();
+            if (data.text) {
+              await sendMessage(data.text);
+            }
+          } catch (err) {
+            addMessage("ai", "Sorry, audio transcription failed.");
+          } finally {
+            recordBtn.disabled = false;
           }
-        } catch (err) {
-          addMessage("ai", "Sorry, transcription failed.");
-        } finally {
-          recordBtn.disabled = false;
-        }
-      });
+        });
 
-      mediaRecorder.start();
-      recordBtn.textContent = "⏹";
+        mediaRecorder.start();
+        recordBtn.textContent = "⏹";
+      } catch (err) {
+        console.error("Microphone access error:", err);
+        addMessage("system", "Microphone access was denied or is unavailable.");
+      }
     });
 
     function addMessage(role, text) {
       const div = document.createElement("div");
       div.className = "msg " + role;
-      div.textContent = (role === "user" ? "You: " : "AI: ") + text;
+      if (role === "user") {
+        div.textContent = "You: " + text;
+      } else if (role === "ai") {
+        div.textContent = "AI: " + text;
+      } else {
+        div.textContent = text;
+      }
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
@@ -84,7 +177,8 @@
 
     async function sendMessage(message) {
       addMessage("user", message);
-      const endpoint = agentSelect.value === "sales" ? "/api/sales/chat" : "/api/chat";
+      const isSales = agentSelect.value === "sales";
+      const endpoint = isSales ? "/api/sales/chat" : "/api/chat";
       try {
         const res = await fetch(endpoint, {
           method: "POST",
@@ -111,6 +205,262 @@
         audio.play();
       } catch (err) {
         console.error("TTS playback failed", err);
+      }
+    }
+
+    // New Chat button
+    newChatBtn.addEventListener("click", async () => {
+      try {
+        await fetch("/api/chat/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent: agentSelect.value }),
+        });
+        chat.innerHTML = "";
+        const agentName = agentSelect.options[agentSelect.selectedIndex].text;
+        addMessage("system", `Started a new ${agentName} call session. Speak or type below.`);
+      } catch (err) {
+        console.error("Reset failed", err);
+      }
+    });
+
+    // End Call button
+    endChatBtn.addEventListener("click", async () => {
+      try {
+        await fetch("/api/chat/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent: agentSelect.value }),
+        });
+        addMessage("system", "Call completed and saved to the Analytics Dashboard. Click '➕ New Chat' to start another call.");
+      } catch (err) {
+        console.error("End call failed", err);
+      }
+    });
+
+    // Switching agent dropdown resets to a fresh session for that agent
+    agentSelect.addEventListener("change", async () => {
+      const agentName = agentSelect.options[agentSelect.selectedIndex].text;
+      try {
+        await fetch("/api/chat/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent: agentSelect.value }),
+        });
+        chat.innerHTML = "";
+        addMessage("system", `Switched to ${agentName}. Ready for conversation.`);
+      } catch (err) {
+        console.error("Agent switch error", err);
+      }
+    });
+
+    // --- Dashboard Tabs & Logic ---
+    const tabAgentBtn = document.getElementById("tab-agent-btn");
+    const tabDashboardBtn = document.getElementById("tab-dashboard-btn");
+    const agentView = document.getElementById("agent-view");
+    const dashboardView = document.getElementById("dashboard-view");
+
+    const metricCalls = document.getElementById("metric-calls");
+    const metricActions = document.getElementById("metric-actions");
+    const metricDuration = document.getElementById("metric-duration");
+    const callsTbody = document.getElementById("calls-tbody");
+    const refreshBtn = document.getElementById("refresh-dashboard-btn");
+
+    const modal = document.getElementById("transcript-modal");
+    const modalTitle = document.getElementById("modal-title");
+    const modalMeta = document.getElementById("modal-meta");
+    const modalBody = document.getElementById("modal-body");
+    const modalCloseBtn = document.getElementById("modal-close-btn");
+
+    tabAgentBtn.addEventListener("click", () => {
+      tabAgentBtn.classList.add("active");
+      tabDashboardBtn.classList.remove("active");
+      agentView.style.display = "block";
+      dashboardView.style.display = "none";
+    });
+
+    tabDashboardBtn.addEventListener("click", () => {
+      tabDashboardBtn.classList.add("active");
+      tabAgentBtn.classList.remove("active");
+      agentView.style.display = "none";
+      dashboardView.style.display = "block";
+      loadDashboard();
+    });
+
+    refreshBtn.addEventListener("click", loadDashboard);
+
+    modalCloseBtn.addEventListener("click", () => {
+      modal.style.display = "none";
+    });
+
+    window.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        modal.style.display = "none";
+      }
+    });
+
+    async function loadDashboard() {
+      await Promise.all([loadMetrics(), loadCalls()]);
+    }
+
+    async function loadMetrics() {
+      try {
+        const res = await fetch("/api/dashboard/metrics");
+        if (!res.ok) throw new Error("Failed to load metrics");
+        const data = await res.json();
+        metricCalls.textContent = data.total_calls ?? 0;
+        metricActions.textContent = (data.total_messages ?? 0) + (data.total_leads ?? 0);
+        metricDuration.textContent = (data.avg_duration ?? 0) + "s";
+      } catch (err) {
+        console.error("Failed to load metrics", err);
+      }
+    }
+
+    function formatTime(isoStr) {
+      if (!isoStr) return "-";
+      try {
+        const d = new Date(isoStr);
+        return isNaN(d.getTime()) ? isoStr : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    async function loadCalls() {
+      try {
+        const res = await fetch("/api/dashboard/calls");
+        if (!res.ok) throw new Error("Failed to load call logs");
+        const calls = await res.json();
+
+        callsTbody.innerHTML = "";
+        if (!calls || calls.length === 0) {
+          const row = document.createElement("tr");
+          row.innerHTML = '<td colspan="8" style="text-align:center; color:#888; padding: 24px;">No calls recorded yet. Start a chat in the Voice Agent to see analytics!</td>';
+          callsTbody.appendChild(row);
+          return;
+        }
+
+        calls.forEach((call) => {
+          const row = document.createElement("tr");
+
+          // Call ID
+          const tdId = document.createElement("td");
+          tdId.textContent = "#" + (call.call_id || call.id);
+
+          // Agent
+          const tdAgent = document.createElement("td");
+          const agentBadge = document.createElement("span");
+          const isSales = (call.agent_type || "").toLowerCase().includes("sales");
+          agentBadge.className = "badge " + (isSales ? "agent-sales" : "agent-assistant");
+          agentBadge.textContent = isSales ? "Sales Agent" : "Personal Assistant";
+          tdAgent.appendChild(agentBadge);
+
+          // Caller
+          const tdCaller = document.createElement("td");
+          const callerName = call.caller_name || "Unknown";
+          const callerPhone = call.caller_phone || call.phone;
+          tdCaller.textContent = callerPhone && callerPhone !== "-" ? `${callerName} (${callerPhone})` : callerName;
+
+          // Time
+          const tdTime = document.createElement("td");
+          tdTime.textContent = formatTime(call.start_time || call.created_at);
+
+          // Duration
+          const tdDuration = document.createElement("td");
+          tdDuration.textContent = call.duration != null ? `${call.duration}s` : "-";
+
+          // Intent
+          const tdIntent = document.createElement("td");
+          const intentBadge = document.createElement("span");
+          intentBadge.className = "intent-tag";
+          intentBadge.textContent = call.intent || "-";
+          tdIntent.appendChild(intentBadge);
+
+          // Status
+          const tdStatus = document.createElement("td");
+          const statusBadge = document.createElement("span");
+          const status = call.call_status || call.status || "completed";
+          statusBadge.className = "badge " + status;
+          statusBadge.textContent = status.replace("_", " ");
+          tdStatus.appendChild(statusBadge);
+
+          // Action
+          const tdAction = document.createElement("td");
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "action-btn";
+          btn.textContent = "View Transcript";
+          btn.addEventListener("click", () => openTranscript(call));
+          tdAction.appendChild(btn);
+
+          row.appendChild(tdId);
+          row.appendChild(tdAgent);
+          row.appendChild(tdCaller);
+          row.appendChild(tdTime);
+          row.appendChild(tdDuration);
+          row.appendChild(tdIntent);
+          row.appendChild(tdStatus);
+          row.appendChild(tdAction);
+
+          callsTbody.appendChild(row);
+        });
+      } catch (err) {
+        console.error("Failed to load calls", err);
+        callsTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#c00;">Failed to load call logs.</td></tr>';
+      }
+    }
+
+    async function openTranscript(call) {
+      const callId = call.call_id || call.id;
+      modalTitle.textContent = `Call #${callId} Details & Transcript`;
+      
+      modalMeta.innerHTML = `
+        <div class="meta-row">
+          <span><strong>Agent:</strong> ${call.agent_type === "sales" ? "Sales Agent" : "Personal Assistant"}</span>
+          <span><strong>Caller:</strong> ${call.caller_name || "Unknown"} ${call.phone && call.phone !== "-" ? `(${call.phone})` : ""}</span>
+        </div>
+        <div class="meta-row">
+          <span><strong>Intent:</strong> ${call.intent || "-"}</span>
+          <span><strong>Duration:</strong> ${call.duration != null ? call.duration + "s" : "-"}</span>
+          <span><strong>Status:</strong> ${call.status || "completed"}</span>
+        </div>
+        ${call.summary ? `<div class="meta-summary"><strong>Summary:</strong> ${call.summary}</div>` : ""}
+      `;
+
+      modalBody.innerHTML = '<div style="color: #666; text-align: center; padding: 16px;">Loading transcript...</div>';
+      modal.style.display = "flex";
+
+      try {
+        const res = await fetch(`/api/dashboard/calls/${callId}/transcript`);
+        if (!res.ok) throw new Error("Failed to load transcript");
+        const transcript = await res.json();
+
+        modalBody.innerHTML = "";
+        if (!transcript || transcript.length === 0) {
+          modalBody.innerHTML = '<div style="color: #888; text-align: center; padding: 16px;">No transcript messages recorded yet.</div>';
+          return;
+        }
+
+        transcript.forEach((t) => {
+          const div = document.createElement("div");
+          const speaker = (t.speaker || "user").toLowerCase();
+          div.className = "transcript-turn " + (speaker === "user" ? "user" : "assistant");
+
+          const header = document.createElement("div");
+          header.className = "transcript-speaker";
+          header.textContent = (speaker === "user" ? "👤 Caller" : "🤖 AI Agent") + (t.timestamp ? ` • ${formatTime(t.timestamp)}` : "");
+
+          const body = document.createElement("div");
+          body.className = "transcript-text";
+          body.textContent = t.message;
+
+          div.appendChild(header);
+          div.appendChild(body);
+          modalBody.appendChild(div);
+        });
+      } catch (err) {
+        console.error("Failed to load transcript", err);
+        modalBody.innerHTML = '<div style="color: #c00; text-align: center; padding: 16px;">Failed to load transcript.</div>';
       }
     }
   </script>

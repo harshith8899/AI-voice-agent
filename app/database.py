@@ -80,16 +80,62 @@ def update_call_caller(call_id: int, caller_name: str | None = None, phone: str 
             conn.execute("UPDATE calls SET phone = ? WHERE id = ?", (phone, call_id))
 
 
-def end_call(call_id: int, intent: str, summary: str) -> None:
+def update_call_activity(
+    call_id: int,
+    intent: str | None = None,
+    caller_name: str | None = None,
+    phone: str | None = None,
+) -> None:
+    """Update call duration, intent, caller name, and phone dynamically on every turn."""
     with _connect() as conn:
         row = conn.execute("SELECT start_time FROM calls WHERE id = ?", (call_id,)).fetchone()
         duration = None
-        if row:
-            start = datetime.fromisoformat(row["start_time"])
-            duration = (datetime.now(timezone.utc) - start).total_seconds()
+        if row and row["start_time"]:
+            try:
+                start = datetime.fromisoformat(row["start_time"])
+                duration = round((datetime.now(timezone.utc) - start).total_seconds(), 1)
+            except Exception:
+                duration = None
+
+        updates = []
+        params = []
+        if intent is not None and intent != "UNKNOWN":
+            updates.append("intent = ?")
+            params.append(intent)
+        elif intent is not None:
+            updates.append("intent = COALESCE(intent, ?)")
+            params.append(intent)
+        if caller_name is not None:
+            updates.append("caller_name = ?")
+            params.append(caller_name)
+        if phone is not None:
+            updates.append("phone = ?")
+            params.append(phone)
+        if duration is not None:
+            updates.append("duration = ?")
+            params.append(duration)
+
+        if updates:
+            params.append(call_id)
+            sql = f"UPDATE calls SET {', '.join(updates)} WHERE id = ?"
+            conn.execute(sql, tuple(params))
+
+
+def end_call(call_id: int, intent: str | None = None, summary: str | None = None) -> None:
+    with _connect() as conn:
+        row = conn.execute("SELECT start_time, intent, summary FROM calls WHERE id = ?", (call_id,)).fetchone()
+        duration = None
+        final_intent = intent or (row["intent"] if row and row["intent"] else "COMPLETED")
+        final_summary = summary or (row["summary"] if row and row["summary"] else None)
+        if row and row["start_time"]:
+            try:
+                start = datetime.fromisoformat(row["start_time"])
+                duration = round((datetime.now(timezone.utc) - start).total_seconds(), 1)
+            except Exception:
+                duration = None
         conn.execute(
             "UPDATE calls SET intent = ?, summary = ?, status = 'completed', duration = ? WHERE id = ?",
-            (intent, summary, duration, call_id),
+            (final_intent, final_summary, duration, call_id),
         )
 
 
@@ -158,3 +204,63 @@ def get_leads() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM leads ORDER BY id DESC").fetchall()
         return [dict(r) for r in rows]
+
+
+def get_dashboard_metrics() -> dict:
+    with _connect() as conn:
+        total_calls = conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] or 0
+        total_messages = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] or 0
+        total_leads = conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0] or 0
+        booked_actions = total_messages + total_leads
+        avg_duration_row = conn.execute(
+            "SELECT AVG(duration) FROM calls WHERE duration IS NOT NULL"
+        ).fetchone()[0]
+        avg_duration = round(float(avg_duration_row), 1) if avg_duration_row is not None else 0.0
+
+        return {
+            "total_calls": total_calls,
+            "booked_actions": booked_actions,
+            "total_actions": booked_actions,
+            "total_messages": total_messages,
+            "total_leads": total_leads,
+            "avg_duration": avg_duration,
+        }
+
+
+def get_call_logs(limit: int = 50) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, caller_name, phone, agent_type, start_time, duration, intent, summary, status "
+            "FROM calls ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        logs = []
+        for r in rows:
+            logs.append(
+                {
+                    "call_id": r["id"],
+                    "id": r["id"],
+                    "caller_name": r["caller_name"] or "Unknown",
+                    "caller_phone": r["phone"] or "-",
+                    "phone": r["phone"] or "-",
+                    "agent_type": r["agent_type"],
+                    "call_status": r["status"],
+                    "status": r["status"],
+                    "start_time": r["start_time"],
+                    "created_at": r["start_time"],
+                    "duration": round(r["duration"], 1) if r["duration"] is not None else None,
+                    "intent": r["intent"] or "-",
+                    "summary": r["summary"] or "",
+                }
+            )
+        return logs
+
+
+def get_call_transcript(call_id: int) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT speaker, message, timestamp FROM conversations WHERE call_id = ? ORDER BY id",
+            (call_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+

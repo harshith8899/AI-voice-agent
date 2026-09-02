@@ -1,16 +1,22 @@
 import os
 import tempfile
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
 load_dotenv()
 
+# pyrefly: ignore [missing-import]
+from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
+# pyrefly: ignore [missing-import]
+from fastapi.responses import FileResponse
+# pyrefly: ignore [missing-import]
+from fastapi.staticfiles import StaticFiles
+# pyrefly: ignore [missing-import]
+from pydantic import BaseModel
+
 from app import database as db
-from app.agent import handle_message, handle_sales_message
+from app.agent import handle_message, handle_sales_message, reset_agent
 from app.stt import transcribe
 from app.tts import synthesize
 
@@ -18,9 +24,15 @@ db.init_db()
 
 app = FastAPI(title="AI Voice Agent")
 
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+
 
 class ChatRequest(BaseModel):
     message: str
+
+
+class ResetRequest(BaseModel):
+    agent: str = "all"
 
 
 class TTSRequest(BaseModel):
@@ -35,6 +47,12 @@ def health():
 @app.post("/api/chat")
 def chat_endpoint(req: ChatRequest):
     return handle_message(req.message)
+
+
+@app.post("/api/chat/reset")
+def reset_chat_endpoint(req: ResetRequest | None = None):
+    agent_type = req.agent if req and req.agent else "all"
+    return reset_agent(agent_type)
 
 
 @app.get("/api/messages")
@@ -65,6 +83,24 @@ def call_detail_endpoint(call_id: int):
     return call
 
 
+@app.get("/api/dashboard/metrics")
+def dashboard_metrics_endpoint():
+    return db.get_dashboard_metrics()
+
+
+@app.get("/api/dashboard/calls")
+def dashboard_calls_endpoint(limit: int = 50):
+    return db.get_call_logs(limit=limit)
+
+
+@app.get("/api/dashboard/calls/{call_id}/transcript")
+def dashboard_call_transcript_endpoint(call_id: int):
+    call = db.get_call(call_id)
+    if call is None:
+        raise HTTPException(status_code=404, detail="Call not found")
+    return db.get_call_transcript(call_id)
+
+
 @app.post("/api/stt")
 async def stt_endpoint(audio: UploadFile):
     suffix = os.path.splitext(audio.filename or "")[1] or ".webm"
@@ -74,7 +110,8 @@ async def stt_endpoint(audio: UploadFile):
     try:
         text = transcribe(tmp_path)
     finally:
-        os.remove(tmp_path)
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
     return {"text": text}
 
 
@@ -82,8 +119,9 @@ async def stt_endpoint(audio: UploadFile):
 def tts_endpoint(req: TTSRequest, background_tasks: BackgroundTasks):
     tmp_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     synthesize(req.text, tmp_path)
-    background_tasks.add_task(os.remove, tmp_path)
+    background_tasks.add_task(lambda p: os.remove(p) if os.path.exists(p) else None, tmp_path)
     return FileResponse(tmp_path, media_type="audio/wav")
 
 
-app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+if os.path.exists(STATIC_DIR):
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")

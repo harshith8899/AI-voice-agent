@@ -5,7 +5,9 @@ __pycache__/
 
 .env
 
+*.bak
 data/*.db
+data/*.db.bak
 data/*.sqlite3
 data/voices/
 
@@ -15,3 +17,5 @@ data/voices/
 .pytest_cache/
 .vscode/
 .idea/
+
+pyrightconfig.json

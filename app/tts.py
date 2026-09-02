@@ -3,7 +3,10 @@ import wave
 
 from piper import PiperVoice
 
-VOICE_MODEL = os.getenv("PIPER_VOICE", "data/voices/en_US-lessac-medium.onnx")
+DEFAULT_VOICE = os.path.join(
+    os.path.dirname(__file__), "..", "data", "voices", "en_US-lessac-medium.onnx"
+)
+VOICE_MODEL = os.getenv("PIPER_VOICE", DEFAULT_VOICE)
 
 _voice = None
 
@@ -11,7 +14,10 @@ _voice = None
 def _get_voice():
     global _voice
     if _voice is None:
-        _voice = PiperVoice.load(VOICE_MODEL)
+        model_path = VOICE_MODEL
+        if not os.path.isabs(model_path) and not os.path.exists(model_path):
+            model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", model_path))
+        _voice = PiperVoice.load(model_path)
     return _voice
 
 
