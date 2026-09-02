@@ -7,6 +7,11 @@
 </head>
 <body>
   <h1>AI Voice Agent</h1>
+  <label for="agent-select">Agent:</label>
+  <select id="agent-select">
+    <option value="assistant">Personal Assistant</option>
+    <option value="sales">Sales Agent</option>
+  </select>
   <div id="chat"></div>
   <form id="chat-form">
     <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off" />
@@ -19,6 +24,7 @@
     const form = document.getElementById("chat-form");
     const input = document.getElementById("chat-input");
     const recordBtn = document.getElementById("record-btn");
+    const agentSelect = document.getElementById("agent-select");
 
     let mediaRecorder = null;
     let audioChunks = [];
@@ -78,8 +84,9 @@
 
     async function sendMessage(message) {
       addMessage("user", message);
+      const endpoint = agentSelect.value === "sales" ? "/api/sales/chat" : "/api/chat";
       try {
-        const res = await fetch("/api/chat", {
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message }),

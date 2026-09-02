@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from app.agent import handle_message, messages_taken
+from app.agent import handle_message, handle_sales_message, leads, messages_taken
 from app.stt import transcribe
 from app.tts import synthesize
 
@@ -37,6 +37,16 @@ def chat_endpoint(req: ChatRequest):
 @app.get("/api/messages")
 def messages_endpoint():
     return messages_taken
+
+
+@app.post("/api/sales/chat")
+def sales_chat_endpoint(req: ChatRequest):
+    return handle_sales_message(req.message)
+
+
+@app.get("/api/leads")
+def leads_endpoint():
+    return leads
 
 
 @app.post("/api/stt")
