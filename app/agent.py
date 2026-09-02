@@ -1,6 +1,6 @@
 import json
-from datetime import datetime, timezone
 
+from app import database as db
 from app.llm import chat
 from app.prompts import PERSONAL_ASSISTANT_PROMPT, SALES_AGENT_PROMPT
 
@@ -18,23 +18,9 @@ INTENTS = {
     "UNKNOWN",
 }
 
-# In-memory stores (will move to SQLite in Phase 8).
-messages_taken: list[dict] = []
-call_summaries: list[str] = []
-
 conversation_history: list[dict] = [{"role": "system", "content": PERSONAL_ASSISTANT_PROMPT}]
 current_caller: dict = {"name": None}
-
-
-def take_message(caller: str, text: str, callback_required: bool) -> None:
-    messages_taken.append(
-        {
-            "caller_name": caller,
-            "message": text,
-            "callback_required": callback_required,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+current_call: dict = {"id": None}
 
 
 def generate_summary(history: list[dict]) -> str:
@@ -69,24 +55,34 @@ def _parse_reply(raw: str) -> dict:
 
 def handle_message(user_message: str) -> dict:
     """Run one turn of the personal assistant and update module-level state."""
+    if current_call["id"] is None:
+        current_call["id"] = db.create_call(agent_type="personal_assistant")
+    call_id = current_call["id"]
+
     conversation_history.append({"role": "user", "content": user_message})
+    db.add_conversation(call_id, "user", user_message)
+
     raw = chat(conversation_history, json_mode=True)
     result = _parse_reply(raw)
     conversation_history.append({"role": "assistant", "content": result["reply"]})
+    db.add_conversation(call_id, "assistant", result["reply"])
 
     if result["caller_name"]:
         current_caller["name"] = result["caller_name"]
+        db.update_call_caller(call_id, caller_name=result["caller_name"])
     caller = current_caller["name"] or "Unknown caller"
 
     if result["intent"] == "MESSAGE":
-        take_message(caller, user_message, callback_required=False)
+        db.add_message(call_id, caller, user_message, callback_required=False)
     elif result["intent"] == "CALLBACK":
-        take_message(caller, user_message, callback_required=True)
+        db.add_message(call_id, caller, user_message, callback_required=True)
     elif result["intent"] == "END_CALL":
-        call_summaries.append(generate_summary(conversation_history))
+        summary = generate_summary(conversation_history)
+        db.end_call(call_id, intent="END_CALL", summary=summary)
         conversation_history.clear()
         conversation_history.append({"role": "system", "content": PERSONAL_ASSISTANT_PROMPT})
         current_caller["name"] = None
+        current_call["id"] = None
 
     return {"reply": result["reply"], "intent": result["intent"]}
 
@@ -95,10 +91,9 @@ def handle_message(user_message: str) -> dict:
 # Sales Agent
 # ---------------------------------------------------------------------------
 
-leads: list[dict] = []
-
 sales_history: list[dict] = [{"role": "system", "content": SALES_AGENT_PROMPT}]
 current_lead: dict = {"name": None, "phone": None, "interest": None}
+current_sales_call: dict = {"id": None}
 
 
 def score_lead(interest: str | None, phone: str | None, name: str | None) -> tuple[int, str]:
@@ -123,21 +118,18 @@ def score_lead(interest: str | None, phone: str | None, name: str | None) -> tup
     return score, classification
 
 
-def create_lead(history: list[dict]) -> dict:
+def create_lead(call_id: int) -> None:
     score, classification = score_lead(
         current_lead["interest"], current_lead["phone"], current_lead["name"]
     )
-    lead = {
-        "name": current_lead["name"],
-        "phone": current_lead["phone"],
-        "interest": current_lead["interest"],
-        "score": score,
-        "classification": classification,
-        "summary": generate_summary(history),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    leads.append(lead)
-    return lead
+    db.add_lead(
+        call_id,
+        current_lead["name"],
+        current_lead["phone"],
+        current_lead["interest"],
+        score,
+        classification,
+    )
 
 
 def _parse_sales_reply(raw: str) -> dict:
@@ -167,10 +159,17 @@ def _parse_sales_reply(raw: str) -> dict:
 
 def handle_sales_message(user_message: str) -> dict:
     """Run one turn of the sales agent and update module-level state."""
+    if current_sales_call["id"] is None:
+        current_sales_call["id"] = db.create_call(agent_type="sales")
+    call_id = current_sales_call["id"]
+
     sales_history.append({"role": "user", "content": user_message})
+    db.add_conversation(call_id, "user", user_message)
+
     raw = chat(sales_history, json_mode=True)
     result = _parse_sales_reply(raw)
     sales_history.append({"role": "assistant", "content": result["reply"]})
+    db.add_conversation(call_id, "assistant", result["reply"])
 
     if result["caller_name"]:
         current_lead["name"] = result["caller_name"]
@@ -178,13 +177,18 @@ def handle_sales_message(user_message: str) -> dict:
         current_lead["phone"] = result["phone"]
     if result["interest"]:
         current_lead["interest"] = result["interest"]
+    if result["caller_name"] or result["phone"]:
+        db.update_call_caller(call_id, caller_name=current_lead["name"], phone=current_lead["phone"])
 
     if result["intent"] == "END_CALL":
-        create_lead(sales_history)
+        create_lead(call_id)
+        summary = generate_summary(sales_history)
+        db.end_call(call_id, intent="END_CALL", summary=summary)
         sales_history.clear()
         sales_history.append({"role": "system", "content": SALES_AGENT_PROMPT})
         current_lead["name"] = None
         current_lead["phone"] = None
         current_lead["interest"] = None
+        current_sales_call["id"] = None
 
     return {"reply": result["reply"], "intent": result["intent"]}

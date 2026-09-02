@@ -46,6 +46,22 @@ uvicorn app.main:app --reload
 
 Visit `http://localhost:8000` for the frontend, `http://localhost:8000/health` for the health check.
 
+## API
+
+```
+GET  /health           Health check
+POST /api/chat          Personal Assistant, one turn   {"message": "..."}
+POST /api/sales/chat    Sales Agent, one turn           {"message": "..."}
+POST /api/stt            Transcribe uploaded audio -> text
+POST /api/tts            Synthesize text -> wav audio
+GET  /api/calls          List all calls
+GET  /api/calls/{id}     Call detail + full transcript
+GET  /api/messages       Messages taken by the Personal Assistant
+GET  /api/leads          Leads captured by the Sales Agent
+```
+
+The frontend has an Agent dropdown (Personal Assistant / Sales Agent) that switches which chat endpoint is used.
+
 ## Status
 
 | Module | Status |
@@ -56,9 +72,9 @@ Visit `http://localhost:8000` for the frontend, `http://localhost:8000/health` f
 | 4. Text-to-Speech (Piper) | ✅ Done |
 | 5. Full voice pipeline | ✅ Done |
 | 6. Personal Assistant agent | ✅ Done |
-| 7. Sales Agent | ⬜ Next |
-| 8. Database (calls/messages/leads) | ⬜ |
-| 9. Dashboard | ⬜ |
+| 7. Sales Agent | ✅ Done |
+| 8. Database (calls/messages/leads) | ✅ Done |
+| 9. Dashboard | ⬜ Next |
 | 10. Telephony (real phone calls) | ⬜ |
 
 ## Development principle

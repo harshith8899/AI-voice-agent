@@ -2,16 +2,19 @@ import os
 import tempfile
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, UploadFile
+from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 load_dotenv()
 
-from app.agent import handle_message, handle_sales_message, leads, messages_taken
+from app import database as db
+from app.agent import handle_message, handle_sales_message
 from app.stt import transcribe
 from app.tts import synthesize
+
+db.init_db()
 
 app = FastAPI(title="AI Voice Agent")
 
@@ -36,7 +39,7 @@ def chat_endpoint(req: ChatRequest):
 
 @app.get("/api/messages")
 def messages_endpoint():
-    return messages_taken
+    return db.get_messages()
 
 
 @app.post("/api/sales/chat")
@@ -46,7 +49,20 @@ def sales_chat_endpoint(req: ChatRequest):
 
 @app.get("/api/leads")
 def leads_endpoint():
-    return leads
+    return db.get_leads()
+
+
+@app.get("/api/calls")
+def calls_endpoint():
+    return db.get_calls()
+
+
+@app.get("/api/calls/{call_id}")
+def call_detail_endpoint(call_id: int):
+    call = db.get_call(call_id)
+    if call is None:
+        raise HTTPException(status_code=404, detail="Call not found")
+    return call
 
 
 @app.post("/api/stt")
