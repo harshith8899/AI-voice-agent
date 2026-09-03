@@ -6,25 +6,52 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>AI Voice Agent</h1>
-  <label for="agent-select">Agent:</label>
-  <select id="agent-select">
-    <option value="assistant">Personal Assistant</option>
-    <option value="sales">Sales Agent</option>
-  </select>
-  <div id="chat"></div>
-  <form id="chat-form">
-    <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off" />
-    <button type="submit">Send</button>
-    <button type="button" id="record-btn">🎤</button>
-  </form>
+  <header class="navbar">
+    <div class="navbar-brand" id="brand-icon">AI Voice Agent</div>
+    <nav class="navbar-links">
+      <a href="/" class="nav-link active" id="nav-chat">Chat</a>
+      <a href="/dashboard.html" class="nav-link" id="nav-dashboard">Dashboard</a>
+    </nav>
+  </header>
 
+  <main class="page chat-page">
+    <div class="card chat-card">
+      <div class="agent-tabs" id="agent-tabs">
+        <button type="button" class="agent-tab active" data-agent="assistant">Personal Assistant</button>
+        <button type="button" class="agent-tab" data-agent="sales">Sales Agent</button>
+      </div>
+
+      <div id="chat"></div>
+
+      <form id="chat-form">
+        <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off" />
+        <button type="button" class="btn btn-icon" id="record-btn"></button>
+        <button type="submit" class="btn btn-primary" id="send-btn"></button>
+      </form>
+    </div>
+  </main>
+
+  <script src="icons.js"></script>
   <script>
+    document.getElementById("brand-icon").innerHTML = icon("phone-call") + " AI Voice Agent";
+    document.getElementById("nav-chat").innerHTML = icon("message-square") + " Chat";
+    document.getElementById("nav-dashboard").innerHTML = icon("layout-dashboard") + " Dashboard";
+    document.getElementById("record-btn").innerHTML = icon("mic");
+    document.getElementById("send-btn").innerHTML = icon("send") + " Send";
+
     const chat = document.getElementById("chat");
     const form = document.getElementById("chat-form");
     const input = document.getElementById("chat-input");
     const recordBtn = document.getElementById("record-btn");
-    const agentSelect = document.getElementById("agent-select");
+    const agentTabs = document.getElementById("agent-tabs");
+
+    let currentAgent = "assistant";
+    agentTabs.addEventListener("click", (e) => {
+      const btn = e.target.closest(".agent-tab");
+      if (!btn) return;
+      currentAgent = btn.dataset.agent;
+      agentTabs.querySelectorAll(".agent-tab").forEach((t) => t.classList.toggle("active", t === btn));
+    });
 
     let mediaRecorder = null;
     let audioChunks = [];
@@ -42,9 +69,13 @@
       mediaRecorder.addEventListener("dataavailable", (e) => audioChunks.push(e.data));
       mediaRecorder.addEventListener("stop", async () => {
         stream.getTracks().forEach((track) => track.stop());
-        recordBtn.textContent = "🎤";
+        recordBtn.classList.remove("recording");
+        recordBtn.innerHTML = icon("mic");
 
         const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+        if (audioBlob.size === 0) {
+          return;
+        }
         const formData = new FormData();
         formData.append("audio", audioBlob, "recording.webm");
 
@@ -54,22 +85,25 @@
           const data = await res.json();
           if (data.text) {
             await sendMessage(data.text);
+          } else {
+            addMessage("ai", "Sorry, I didn't catch that. Could you repeat?");
           }
         } catch (err) {
-          addMessage("ai", "Sorry, transcription failed.");
+          addMessage("ai", "Sorry, I didn't catch that. Could you repeat?");
         } finally {
           recordBtn.disabled = false;
         }
       });
 
       mediaRecorder.start();
-      recordBtn.textContent = "⏹";
+      recordBtn.classList.add("recording");
+      recordBtn.innerHTML = icon("x");
     });
 
     function addMessage(role, text) {
       const div = document.createElement("div");
       div.className = "msg " + role;
-      div.textContent = (role === "user" ? "You: " : "AI: ") + text;
+      div.textContent = text;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
@@ -84,7 +118,7 @@
 
     async function sendMessage(message) {
       addMessage("user", message);
-      const endpoint = agentSelect.value === "sales" ? "/api/sales/chat" : "/api/chat";
+      const endpoint = currentAgent === "sales" ? "/api/sales/chat" : "/api/chat";
       try {
         const res = await fetch(endpoint, {
           method: "POST",

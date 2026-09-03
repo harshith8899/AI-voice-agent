@@ -73,6 +73,9 @@ async def stt_endpoint(audio: UploadFile):
         tmp_path = tmp.name
     try:
         text = transcribe(tmp_path)
+    except Exception as e:
+        print(f"[stt] transcription failed: {e}")
+        text = ""
     finally:
         os.remove(tmp_path)
     return {"text": text}

@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS leads (
     interest TEXT,
     score INTEGER NOT NULL,
     classification TEXT NOT NULL,
+    follow_up_required INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 """
@@ -117,12 +118,13 @@ def add_lead(
     interest: str | None,
     score: int,
     classification: str,
+    follow_up_required: bool,
 ) -> None:
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO leads (call_id, name, phone, interest, score, classification, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (call_id, name, phone, interest, score, classification, _now()),
+            "INSERT INTO leads (call_id, name, phone, interest, score, classification, "
+            "follow_up_required, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (call_id, name, phone, interest, score, classification, int(follow_up_required), _now()),
         )
 
 
@@ -157,4 +159,7 @@ def get_messages() -> list[dict]:
 def get_leads() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM leads ORDER BY id DESC").fetchall()
-        return [dict(r) for r in rows]
+        leads = [dict(r) for r in rows]
+        for lead in leads:
+            lead["follow_up_required"] = bool(lead["follow_up_required"])
+        return leads

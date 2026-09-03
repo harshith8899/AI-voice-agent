@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard - AI Voice Agent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="navbar">
+    <div class="navbar-brand" id="brand-icon">AI Voice Agent</div>
+    <nav class="navbar-links">
+      <a href="/" class="nav-link" id="nav-chat">Chat</a>
+      <a href="/dashboard.html" class="nav-link active" id="nav-dashboard">Dashboard</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <div class="page-header">
+      <h1>Dashboard</h1>
+      <p>Overview of calls, messages, and leads.</p>
+    </div>
+
+    <div id="stats" class="stats"></div>
+
+    <div class="section">
+      <h2 class="section-title">Recent Calls</h2>
+      <div class="card table-card">
+        <table id="calls-table">
+          <thead>
+            <tr>
+              <th>Caller</th>
+              <th>Agent</th>
+              <th>Intent</th>
+              <th>Duration</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="call-detail" class="card detail-panel" hidden></div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Leads</h2>
+      <div class="card table-card">
+        <table id="leads-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Interest</th>
+              <th>Score</th>
+              <th>Classification</th>
+              <th>Follow-up</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="icons.js"></script>
+  <script>
+    document.getElementById("brand-icon").innerHTML = icon("phone-call") + " AI Voice Agent";
+    document.getElementById("nav-chat").innerHTML = icon("message-square") + " Chat";
+    document.getElementById("nav-dashboard").innerHTML = icon("layout-dashboard") + " Dashboard";
+
+    const AGENT_LABELS = { personal_assistant: "Personal Assistant", sales: "Sales Agent" };
+    const CLASSIFICATION_PILL = { HOT: "pill-danger", WARM: "pill-warning", COLD: "pill-info", LOW: "pill-neutral" };
+
+    async function getJSON(url) {
+      const res = await fetch(url);
+      return res.json();
+    }
+
+    function formatDuration(seconds) {
+      if (seconds == null) return "-";
+      const s = Math.round(seconds);
+      if (s < 60) return `${s}s`;
+      return `${Math.floor(s / 60)}m ${s % 60}s`;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return "-";
+      return new Date(iso).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+
+    function statusPill(status) {
+      return status === "completed"
+        ? `<span class="pill pill-success">Completed</span>`
+        : `<span class="pill pill-warning">In progress</span>`;
+    }
+
+    function classificationPill(classification) {
+      const cls = CLASSIFICATION_PILL[classification] || "pill-neutral";
+      return `<span class="pill ${cls}">${classification}</span>`;
+    }
+
+    function emptyState(message) {
+      return `<div class="empty-state">${icon("circle-check")}<p>${message}</p></div>`;
+    }
+
+    async function showCallDetail(callId) {
+      const call = await getJSON(`/api/calls/${callId}`);
+      const detail = document.getElementById("call-detail");
+      const transcript = call.transcript
+        .map((t) => {
+          const cls = t.speaker === "user" ? "user" : "ai";
+          const label = t.speaker === "user" ? "Caller" : "AI";
+          return `<div class="msg ${cls}"><strong>${label}:</strong> ${t.message}</div>`;
+        })
+        .join("");
+
+      detail.innerHTML = `
+        <div class="detail-header">
+          <div>
+            <p class="detail-title">${call.caller_name || "Unknown caller"} &middot; Call #${call.id}</p>
+            <div class="detail-meta">
+              <span class="meta-inline">${icon("clock")} ${formatDuration(call.duration)}</span>
+              <span class="meta-inline">${icon("calendar")} ${formatDate(call.start_time)}</span>
+              <span class="pill pill-neutral">${call.intent || "UNKNOWN"}</span>
+            </div>
+          </div>
+          <button class="detail-close" id="close-detail" aria-label="Close">${icon("x")}</button>
+        </div>
+        ${call.summary ? `<div class="detail-summary">${call.summary}</div>` : ""}
+        <div class="transcript">${transcript || "No messages recorded."}</div>
+      `;
+      detail.hidden = false;
+      document.getElementById("close-detail").addEventListener("click", () => {
+        detail.hidden = true;
+      });
+      detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    async function loadDashboard() {
+      const [calls, messages, leads] = await Promise.all([
+        getJSON("/api/calls"),
+        getJSON("/api/messages"),
+        getJSON("/api/leads"),
+      ]);
+
+      const hotLeads = leads.filter((l) => l.classification === "HOT").length;
+      document.getElementById("stats").innerHTML = `
+        <div class="card stat-card">
+          <div class="stat-icon primary">${icon("phone-call")}</div>
+          <div><div class="stat-value">${calls.length}</div><div class="stat-label">Total Calls</div></div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-icon info">${icon("message-square")}</div>
+          <div><div class="stat-value">${messages.length}</div><div class="stat-label">Messages</div></div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-icon success">${icon("users")}</div>
+          <div><div class="stat-value">${leads.length}</div><div class="stat-label">Leads</div></div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-icon danger">${icon("flame")}</div>
+          <div><div class="stat-value">${hotLeads}</div><div class="stat-label">Hot Leads</div></div>
+        </div>
+      `;
+
+      const callsBody = document.querySelector("#calls-table tbody");
+      if (calls.length === 0) {
+        callsBody.innerHTML = `<tr><td colspan="7">${emptyState("No calls yet. Start a conversation from the chat page.")}</td></tr>`;
+      } else {
+        callsBody.innerHTML = calls
+          .map(
+            (c) => `
+          <tr data-call-id="${c.id}" class="row-clickable">
+            <td class="cell-primary">${c.caller_name || "Unknown"}</td>
+            <td class="cell-muted">${AGENT_LABELS[c.agent_type] || c.agent_type}</td>
+            <td class="cell-muted">${c.intent || "-"}</td>
+            <td class="cell-muted">${formatDuration(c.duration)}</td>
+            <td>${statusPill(c.status)}</td>
+            <td class="cell-muted">${formatDate(c.start_time)}</td>
+            <td class="row-chevron">${icon("chevron-right")}</td>
+          </tr>`
+          )
+          .join("");
+        callsBody.querySelectorAll("tr").forEach((row) => {
+          row.addEventListener("click", () => showCallDetail(row.dataset.callId));
+        });
+      }
+
+      const leadsBody = document.querySelector("#leads-table tbody");
+      if (leads.length === 0) {
+        leadsBody.innerHTML = `<tr><td colspan="5">${emptyState("No leads yet. Leads appear here after a Sales Agent call ends.")}</td></tr>`;
+      } else {
+        leadsBody.innerHTML = leads
+          .map(
+            (l) => `
+          <tr>
+            <td class="cell-primary">${l.name || "Unknown"}</td>
+            <td class="cell-muted">${l.interest || "-"}</td>
+            <td class="cell-muted">${l.score}</td>
+            <td>${classificationPill(l.classification)}</td>
+            <td>${l.follow_up_required ? `<span class="followup-yes">${icon("circle-check")} Yes</span>` : `<span class="followup-no">No</span>`}</td>
+          </tr>`
+          )
+          .join("");
+      }
+    }
+
+    loadDashboard();
+  </script>
+</body>
+</html>

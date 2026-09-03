@@ -122,6 +122,7 @@ def create_lead(call_id: int) -> None:
     score, classification = score_lead(
         current_lead["interest"], current_lead["phone"], current_lead["name"]
     )
+    follow_up_required = classification in ("HOT", "WARM")
     db.add_lead(
         call_id,
         current_lead["name"],
@@ -129,6 +130,7 @@ def create_lead(call_id: int) -> None:
         current_lead["interest"],
         score,
         classification,
+        follow_up_required,
     )
 
 
