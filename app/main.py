@@ -12,11 +12,13 @@ load_dotenv()
 from app import database as db
 from app.agent import handle_message, handle_sales_message
 from app.stt import transcribe
+from app.telephony import router as telephony_router
 from app.tts import synthesize
 
 db.init_db()
 
 app = FastAPI(title="AI Voice Agent")
+app.include_router(telephony_router)
 
 
 class ChatRequest(BaseModel):

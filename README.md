@@ -58,9 +58,33 @@ GET  /api/calls          List all calls
 GET  /api/calls/{id}     Call detail + full transcript
 GET  /api/messages       Messages taken by the Personal Assistant
 GET  /api/leads          Leads captured by the Sales Agent
+
+POST /api/telephony/answer      Vobiz answer_url webhook (inbound call -> greeting XML)
+POST /api/telephony/recording   Vobiz recording callback (caller audio -> reply XML)
+GET  /api/telephony/audio/{f}   Serves generated reply audio back to Vobiz
 ```
 
 The frontend has an Agent dropdown (Personal Assistant / Sales Agent) that switches which chat endpoint is used.
+
+## Telephony (Vobiz)
+
+Real phone calls route to the Personal Assistant using Vobiz's Record/Play XML flow (turn-based,
+no WebSocket streaming): Vobiz posts call events to our webhooks, we run the same
+`transcribe() -> handle_message() -> synthesize()` pipeline used everywhere else, and respond
+with Voice XML telling Vobiz what to play/record next.
+
+1. Sign up at [console.vobiz.ai](https://console.vobiz.ai), buy a phone number.
+2. Run `uvicorn app.main:app --reload` locally, then expose it: `ngrok http 8000`.
+3. In the Vobiz console, create an XML Application with:
+   - Answer URL: `https://<your-ngrok-domain>/api/telephony/answer`
+   - Method: `POST`
+4. Attach your purchased number to that Application.
+5. Call the number — you should hear the Personal Assistant greeting and be able to hold a
+   multi-turn conversation.
+
+Currently supports **one active call at a time** (matches the browser demo's single-conversation
+state) and inbound calls to the Personal Assistant only. Outbound/Sales calling and concurrent
+calls are not implemented — not needed for the MVP demo.
 
 ## Status
 
@@ -74,8 +98,8 @@ The frontend has an Agent dropdown (Personal Assistant / Sales Agent) that switc
 | 6. Personal Assistant agent | ✅ Done |
 | 7. Sales Agent | ✅ Done |
 | 8. Database (calls/messages/leads) | ✅ Done |
-| 9. Dashboard | ⬜ Next |
-| 10. Telephony (real phone calls) | ⬜ |
+| 9. Dashboard | ✅ Done |
+| 10. Telephony (real phone calls) | ✅ Inbound calls to Personal Assistant via Vobiz |
 
 ## Development principle
 

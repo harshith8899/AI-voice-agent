@@ -53,6 +53,27 @@ def _parse_reply(raw: str) -> dict:
     return {"reply": reply, "intent": intent, "caller_name": caller_name}
 
 
+def start_call(phone: str | None = None) -> str:
+    """Begin a new personal-assistant call and return the AI's opening greeting."""
+    call_id = db.create_call(agent_type="personal_assistant")
+    current_call["id"] = call_id
+    current_caller["name"] = None
+    if phone:
+        db.update_call_caller(call_id, phone=phone)
+
+    conversation_history.clear()
+    conversation_history.append({"role": "system", "content": PERSONAL_ASSISTANT_PROMPT})
+    conversation_history.append(
+        {"role": "user", "content": "(Call connected. Greet the caller and begin.)"}
+    )
+
+    raw = chat(conversation_history, json_mode=True)
+    result = _parse_reply(raw)
+    conversation_history.append({"role": "assistant", "content": result["reply"]})
+    db.add_conversation(call_id, "assistant", result["reply"])
+    return result["reply"]
+
+
 def handle_message(user_message: str) -> dict:
     """Run one turn of the personal assistant and update module-level state."""
     if current_call["id"] is None:
