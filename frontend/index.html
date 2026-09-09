@@ -23,9 +23,14 @@
 
       <div id="chat"></div>
 
+      <div id="speaking-indicator" class="speaking-indicator" hidden>
+        <span class="eq-bars"><span></span><span></span><span></span></span>
+        AI is speaking...
+      </div>
+
       <form id="chat-form">
-        <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off" />
-        <button type="button" class="btn btn-icon" id="record-btn"></button>
+        <input id="chat-input" type="text" placeholder="Type a message... (or hold Space to talk)" autocomplete="off" />
+        <button type="button" class="btn btn-icon" id="record-btn" title="Click or hold Space to talk"></button>
         <button type="submit" class="btn btn-primary" id="send-btn"></button>
       </form>
     </div>
@@ -44,6 +49,7 @@
     const input = document.getElementById("chat-input");
     const recordBtn = document.getElementById("record-btn");
     const agentTabs = document.getElementById("agent-tabs");
+    const speakingIndicator = document.getElementById("speaking-indicator");
 
     let currentAgent = "assistant";
     agentTabs.addEventListener("click", (e) => {
@@ -56,13 +62,19 @@
     let mediaRecorder = null;
     let audioChunks = [];
 
-    recordBtn.addEventListener("click", async () => {
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
+    async function startRecording() {
+      if (mediaRecorder && mediaRecorder.state === "recording") return;
+      if (recordBtn.disabled) return;
+
+      recordBtn.disabled = true;
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        recordBtn.disabled = false;
+        addMessage("ai", "Couldn't access the microphone.");
         return;
       }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorder = new MediaRecorder(stream);
       audioChunks = [];
 
@@ -96,8 +108,39 @@
       });
 
       mediaRecorder.start();
+      recordBtn.disabled = false;
       recordBtn.classList.add("recording");
       recordBtn.innerHTML = icon("x");
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+      }
+    }
+
+    recordBtn.addEventListener("click", () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    });
+
+    function isTypingContext() {
+      return document.activeElement === input;
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.code !== "Space" || e.repeat || isTypingContext()) return;
+      e.preventDefault();
+      startRecording();
+    });
+
+    document.addEventListener("keyup", (e) => {
+      if (e.code !== "Space" || isTypingContext()) return;
+      e.preventDefault();
+      stopRecording();
     });
 
     function addMessage(role, text) {
@@ -142,8 +185,12 @@
         });
         const audioBlob = await res.blob();
         const audio = new Audio(URL.createObjectURL(audioBlob));
+        audio.addEventListener("play", () => { speakingIndicator.hidden = false; });
+        audio.addEventListener("ended", () => { speakingIndicator.hidden = true; });
+        audio.addEventListener("error", () => { speakingIndicator.hidden = true; });
         audio.play();
       } catch (err) {
+        speakingIndicator.hidden = true;
         console.error("TTS playback failed", err);
       }
     }
