@@ -16,5 +16,5 @@ def _get_model():
 
 def transcribe(audio_path: str) -> str:
     """Transcribe an audio file to text."""
-    segments, _ = _get_model().transcribe(audio_path)
+    segments, _ = _get_model().transcribe(audio_path, language="en", vad_filter=True)
     return " ".join(segment.text.strip() for segment in segments).strip()

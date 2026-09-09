@@ -12,7 +12,9 @@ def chat(messages: list[dict], json_mode: bool = False) -> str:
         "model": OLLAMA_MODEL,
         "messages": messages,
         "stream": False,
-        "think": False,
+        # qwen3:8b silently ignores conversation history in JSON mode when
+        # thinking is off (repeats the same reply regardless of user input).
+        "think": True,
     }
     if json_mode:
         payload["format"] = "json"
@@ -20,7 +22,7 @@ def chat(messages: list[dict], json_mode: bool = False) -> str:
         response = requests.post(
             f"{OLLAMA_HOST}/api/chat",
             json=payload,
-            timeout=60,
+            timeout=120,
         )
         response.raise_for_status()
         return response.json()["message"]["content"]
