@@ -1083,6 +1083,12 @@ fix: handle empty speech input
 
 Avoid giant commits containing unrelated changes.
 
+**Claude must never run `git commit` or `git push` itself.**
+
+When changes are ready, Claude should only provide the exact `git add` /
+`git commit` / `git push` commands (with a proposed commit message) for
+the user to run themselves. The user commits and pushes — always.
+
 ---
 
 # 30. BEFORE MODIFYING CODE
